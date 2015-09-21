@@ -1,0 +1,16 @@
+{
+  "name": "BookStore",
+  "version": "1.0.0",
+  "description": "A demonstration of the React Object Store for a datamodel for books",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Daniel Singer",
+  "license": "ISC",
+  "dependencies": {
+    "ejs": "^2.3.3",
+    "express": "^4.13.3",
+    "underscore": "^1.8.3"
+  }
+}
