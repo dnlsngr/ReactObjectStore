@@ -3,14 +3,14 @@ React Lazy Object Store allows you to build complex client-heavy applications in
 
 ##Notes on usage
 * Data should be hierarchical, with subtypes related to their parents at a predictable object path. For example, a Book object that contains an `authors` field with an array of Author references.
-* References from a parent object to a child should be specified as object IDs in place of the object, as implemented by [Mongoose 'ref' types](MONGOOSEURL)
+* References from a parent object to a child should be specified as object IDs in place of the object, as implemented by [Mongoose 'ref' types](http://mongoosejs.com/docs/populate.html)
 * Top-level data for your site should be represented as an array of one or more objects of the same type. For example, an array of Book objects would make sense as top-level data, with references to Author objects that can be loaded at a later time.
 
 ##Notes on design
 
 ####Initialization and use
 
-The top-level API is meant to be used outside a React component, to initialize the Object Store and to pass top-level data into the React tree. *The React App Store will pass two properties into the parent component specified in `resetData()`: `rootData` which is an array of top-level objects, and `objStore`, which is a reference to the Object Store itself, and should allow access to the update API by passing the objStore property as a prop down the tree.*
+The top-level API is meant to be used outside a React component, to initialize the Object Store and to pass top-level data into the React tree. **The React App Store will pass two properties into the parent component: `rootData` which is an array of top-level objects, and `objStore`, which is a reference to the Object Store itself, and should allow access to the update API by passing the objStore property as a prop down the tree.**
 
 ####Storing and Stitching
 
@@ -75,7 +75,7 @@ Note that this informs the design of the stitcher: it should always try to attac
 
 ##1. Set up REST endpoints for your objects
 
-The object store assumes you have REST endpoints that support CRUD operations, in exactly the way Backbone is normally configured. You can see their documentation for more details: [Backbone](http://backbonejs.org/). Please note that for `fetch()` to work, an additional `get()` endpoint needs to be configured to return multiple ids at once. For example:
+The object store assumes you have REST endpoints that support CRUD operations, in exactly the way Backbone is normally configured. You can see their [documentation](http://backbonejs.org/) for more details. Please note that for `fetch()` to work, an additional `get()` endpoint needs to be configured to return multiple ids at once. For example:
 
 ```javascript
 app.post('/authors', function (req, res) {
@@ -229,6 +229,10 @@ ObjStore.resetData(
 
 ##Set Collection
 
+```javascript
+function setCollection(collection, modelName) {...
+```
+
 This is used to override the contents of an un-initialized collection. This can be useful in cases where you don't want to lazy-load datasets that are not at the top-level of your hierarchy. For example, you may have a list of authors in memory when you load a list of books, and so after initializing the React Lazy Object Store with Books, you can call `ObjStore.setCollection(authors, 'authors');`.
 
 #Update API
@@ -236,6 +240,10 @@ This is used to override the contents of an un-initialized collection. This can 
 These functions are called from within React components, *by accessing the `objStore` prop that is passed into the top-level component.* All of these functions trigger a re-render of the UI.
 
 ##Add
+
+```javascript
+function add(object, modelName, [callback]) {...
+```
 
 This is used to create a new object, add it to the data store, and persist it to the server (via Backbone sync).
 
@@ -253,7 +261,14 @@ var BookView = React.createClass({
 
 ##Set
 
-This is used to update a field on an existing object in the data store, and persist it to the server (via Backbone sync). Note that fields can be updated in bulk by replacing the first two arguments with an object containing the new field values.
+```javascript
+function set(field, newValue, id, modelName, [callback]) {...
+```
+```javascript
+function set(updateObject, id, modelName, [callback]) {...
+```
+
+This is used to update a field on an existing object in the data store, and persist it to the server (via Backbone sync). Fields can also be updated in bulk by replacing the first two arguments with an object containing the new field values.
 
 ```
 var BookView = React.createClass({
@@ -268,6 +283,10 @@ var BookView = React.createClass({
 
 ##Destroy
 
+```javascript
+function destroy(id, modelName, [callback]) {...
+```
+
 This is used to delete an object from the data store, and delete it from the server (via Backbone)
 
 ```
@@ -281,6 +300,10 @@ var BookView = React.createClass({
 ```
 
 ##Fetch
+
+```javascript
+function fetch(ids, modelName) {...
+```
 
 This is how your application can lazy-load data, and should be called from within the React views when an action is taken that necessitates additional objects to be loaded. Since this will automatically trigger a re-render when the data returns, the stitching function should automatically swap the new data in its correct place. Note that fetching an object that already exists in the Object Store will have no effect; if you need to explicitly update an object with data from the server, use `refresh`.
 
@@ -300,9 +323,17 @@ var BookView = React.createClass({
 
 ##FetchAll
 
+```javascript
+function fetchAll(modelName, [callback]) {...
+```
+
 A convenience function that requests all objects of the given type from the server. Useful for populating multi-selects, and other cases where all elements should be displayed to the user. Any subsequent calls to this function will result in no action. 
 
 ##Refresh
+
+```javascript
+function refresh(id, modelName, [callback]) {...
+```
 
 Use this function to retrieve data for an object from the server and overwrite the current object stored in the Object Store, if it exists. This is useful when your application triggers a server-side process that updates data objects without returning the updated representations to your React component.
 
