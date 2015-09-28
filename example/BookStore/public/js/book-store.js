@@ -1,4 +1,4 @@
-var MY_REACT_OBJECT_STORE = getAppStore();
+var MY_REACT_OBJECT_STORE = getLazyObjectStore();
 
 (function() {
   //Get first few books

@@ -1,10 +1,81 @@
-var LazyObjectStore = function(stitch, classEnum){
-    if (!classEnum || !stitch) {
-        throw new Error('Must provide stitcher and object schema!');
+var LazyObjectStore = function(classEnum, copyFunction){
+    if (!classEnum) {
+        throw new Error('Must provide object schema!');
     }
+    _.values(classEnum, function(config) {
+        if (!config.model || !config.collection) {
+            throw new Error('All data types must have a model and a collection');
+        }
+    });
+    //Validation: make sure each stitcher has an object path
     this.MODEL_CLASSES = classEnum;
-    this._stitch = stitch;
 };
+
+//TODO: make this configurable by the user
+function getCopy(obj) {
+    return JSON.parse( JSON.stringify( obj ) );
+}
+
+function _populate(refElem, path, modelType) {
+    // IMPORTANT: lets you pass in which field on the element has the id
+    // e.g. for deal.properties, id is deal.properties[x].property_id
+    // e.f. for contact.phones, the id is just contact.phones[x]
+    var object_id = path ? refElem[path] : refElem;
+
+    //Ref may already be populated
+    var objId = _.isObject(object_id) ? object_id._id : object_id;
+    var refObj = this._modelHash[modelType].get(objId);
+
+    // Push the object if we have it--otherwise push id back
+    var newObj = refObj ? refObj.toJSON() : objId;
+    if (!_.isObject(newObj)) {
+        //Unable to populate
+        return refElem;
+    }
+    else {
+        newObj = getCopy(newObj);
+    }
+    // Recursively stitch if necessary
+    if (this.MODEL_CLASSES[modelType].stitchers) {
+        _findStitch.call(this, newObj, modelType);
+    }
+    if (path) {
+        refElem[path] = newObj;
+    }
+    return refElem;
+}
+
+//Only used internally (should be private)
+function _findStitch(data, modelName) {
+    var stitchers = this.MODEL_CLASSES[modelName].stitchers;
+    if (!stitchers) {
+        return;
+    }
+
+    var that = this;
+    _.each(stitchers, function(stitcher) {
+        _.each(data, function(parentObject) {
+            var objRef = parentObject[stitcher.objectPath];
+            if (_.isArray(objRef)) {
+                var stitchedRefs = _.map(objRef, function(objToStitch) {
+                    return _populate.call(that,
+                        objToStitch, 
+                        stitcher.idPath,
+                        stitcher.modelType);
+                });
+                parentObject[stitcher.objectPath] = stitchedRefs;
+            }
+            else {
+                var stitchedRef = _populate.call(that,
+                        objRef, 
+                        stitcher.idPath,
+                        stitcher.modelType);
+                parentObject[stitcher.objectPath] = stitchedRef;
+            }
+        });
+    });
+    return data;
+}
 
 //Only used internally (should be private)
 function _getStitchedDataFromModelHash(){
@@ -17,10 +88,10 @@ function _getStitchedDataFromModelHash(){
     });
 
     //Copy so as to not operate on the objects in the data store
-    var rootDataCopy = JSON.parse(JSON.stringify(rootData));
+    var rootDataCopy = getCopy(rootData);
 
     //Stitch the data together based on the types. Update data store
-    return this._stitch.call(this, rootDataCopy, this._rootParentType);
+    return _findStitch.call(this, rootDataCopy, this._rootParentType);
 
 }
 
@@ -98,7 +169,7 @@ LazyObjectStore.prototype.add = function(object, modelName, callback)
     this._lastUpdateSent = thisUpdate;
 
     var that = this;
-    newModel.save({ 
+    newModel.save(object, { 
         wait: true,
         success: function(model) {
             that._modelHash[modelName].add(model);

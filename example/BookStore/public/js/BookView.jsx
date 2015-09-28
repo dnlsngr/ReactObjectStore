@@ -9,12 +9,14 @@ var BookView = React.createClass({
     //Here we add a new object AND set some fields on an existing object
     //We are creating a new Author and modifying a Book to include it
     this.props.objStore.add(
-      {name : this.state.nextAuthor},
+      {author_name : this.state.nextAuthor},
       'authors',
       function(newAuthor) {
         //We need to wait for the response to get the server-generated ID        
         var authors = that.props.book.authors || [];
-        authors.push(newAuthor._id);
+        authors.push({
+          author_id : newAuthor._id
+        });
         that.props.objStore.set(
           {authors : authors},
           that.props.book._id,
@@ -30,15 +32,17 @@ var BookView = React.createClass({
       });
   },
   getAuthors : function() {
-    this.props.objStore.fetch(this.props.book.authors, 'authors');
+    this.props.objStore.fetch(
+      _.pluck(this.props.book.authors, 'author_id'), 
+      'authors');
   },
   render : function() {
     var authors = this.props.book.authors || [];
     var populatedAuthors = _.filter(authors, function(author) {
-      return _.isObject(author);
+      return _.isObject(author.author_id);
     });
     var authorRows = _.map(populatedAuthors, function(author) {
-        return author.name;//TODO: make author a component
+        return author.author_id.author_name;//TODO: make author a component
     });
 
     var getAuthorLink = (

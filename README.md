@@ -2,21 +2,23 @@
 React Lazy Object Store allows you to build complex client-heavy applications in React, while making lazy-loading and updating data simple to implement and reason about. It is ideal for applications which are backed by a complex hierarchy of data objects that can be loaded independently.
 
 ##Notes on usage
-* Data should be hierarchical, with subtypes related to their parents at a predictable object path. For example, a Book object that contains an `authors` field with an array of Author references.
+* Data should be hierarchical, with subtypes related to their parents at a predictable object path. For example, a `Book` object that contains an `authors` field with an array of `Author` references.
 * References from a parent object to a child should be specified as object IDs in place of the object, as implemented by [Mongoose 'ref' types](http://mongoosejs.com/docs/populate.html)
-* Top-level data for your site should be represented as an array of one or more objects of the same type. For example, an array of Book objects would make sense as top-level data, with references to Author objects that can be loaded at a later time.
+* Top-level data for your site should be represented as an array of one or more objects of the same type. For example, an array of `Book` objects would make sense as top-level data, with references to `Author` objects that can be loaded at a later time.
 
 ##Notes on design
 
 ####Initialization and use
 
-The top-level API is meant to be used outside a React component, to initialize the Object Store and to pass top-level data into the React tree. **The React App Store will pass two properties into the parent component: `rootData` which is an array of top-level objects, and `objStore`, which is a reference to the Object Store itself, and should allow access to the update API by passing the objStore property as a prop down the tree.**
+The "top-level" API (`resetData` and `setCollection`) is meant to be used outside a React component, to initialize the Object Store and to pass top-level data into the React tree. The remaining methods constitute the "update" API, and should be called from inside the React tree.
+
+**The React App Store will pass two properties into the parent component: `rootData` which is an array of top-level objects, and `objStore`, which is a reference to the Object Store itself, and should allow access to the "update" API as a prop, which can be passed around to child components that need to `set`, `add`, `destroy`, `fetch` or `refresh` data objects.**
 
 ####Storing and Stitching
 
-The guiding principal of the React Lazy Object Store is that objects are easiest to work with and update in isolation, while their composed hierarchy is only relevant to view the data.
+The guiding principal of the React Lazy Object Store is that objects are easiest to work with in isolation, while their composed hierarchy is only relevant to view the data.
 
-All data objects are stored in isolation, in separate Backbone collections by type. Only just before we want to render the UI do we stitch the individual objects together according to a stitching function provided in the configuration.
+All data objects are stored in isolation, in separate Backbone collections by type. Only just before we want to render the UI do we stitch the individual objects together.
 
 For example, we might have a Book object, which has a reference to an Author object, as follows:
 
@@ -25,51 +27,30 @@ For example, we might have a Book object, which has a reference to an Author obj
 {
   _id     : '538f255864d771bf0bd9dddd',
   title   : 'The C Programming Language',
-  authors : [
-    '538f255864d771bf0bd91111',
-    '538f255864d771bf0bd93333'
+  author_list : [
+    { author_id : '538f255864d771bf0bd91111'},
+    { author_id : '538f255864d771bf0bd93333'}
   ]
 }
 
 //Author
 {
   _id   : '538f255864d771bf0bd91111',
-  name  : 'Brian Kernighan'
+  author_name  : 'Brian Kernighan'
 }
 
 ```
 
-The Object Store will keep two separate collections of Book and Author models. Just before it renders, it will call a user-supplied stitch function, which might look something like this:
-
-```javascript
-function stitchBook(book) {
-  book.authors  = _.map(book.authors, function(authorId) {
-    if (_.isString(authorId)) {
-      //If object is not populated, look for it in the hash
-      var refObj = that._modelHash['authors'].get(authorId);
-      //If we have it, plug it into the right place in the object
-      if (refObj) {
-        var refObjCopy = JSON.parse(JSON.stringify(refObj));
-        stitchAuthor(refObjCopy);
-        return refObjCopy;
-      }
-    }
-    //If obj is populated, or if we don't have it, just put the id back
-    return authorId;
-  });
-}
-```
+The Object Store will keep two separate collections of Book and Author models, but if a Book has a reference to an Author that has been lazy-loaded ('fetched'), then that author will appear in place of its `author_id` on the Book object when passed into your React component.
 
 #### Fetching
 
-The decision to load a piece of data into the UI is always driven by some user interaction which signals that the data is needed. Therefore, the React Lazy Object Store provides a single command for a React component to load a piece of data, which does the following:
+The decision to load a piece of data into the UI from the server is always driven by some user interaction which signals that the data is needed. Therefore, the React Lazy Object Store provides a single command for a React component to load a piece of data, which does the following:
 
-1. Ensures that we don't have the data in the Store already
+1. Ensures that we don't have the data in the Store already, and that we're not in the process of fetching it
 2. Makes a call to a special `get()` endpoint that fetches objects for a list of IDs
 3. Adds the resulting objects to the data store in the client
 4. Re-stitches and re-renders the UI, which will now have the new data
-
-Note that this informs the design of the stitcher: it should always try to attach objects that are present in the client data store, but if not, it leaves them as references, which can be fetched by the React components at a later time as needed.
 
 #Quickstart:
 
@@ -123,55 +104,48 @@ var Books = Backbone.Collection.extend({
 });
 ```
 
-##4. Define stitching function
+##4. Build `classEnum` configuration object
 
-This is a function that is called on every re-render, and executes the stitching together of disparate objects. Its input is a set of top-level objects in the hierarchy. For each object, it should look for the element of interest, and then on a best-effort-basis try to swap in the actual object from the model hash. Make sure you read the above notes on Storing and Stitching to understand how this should work. Here is an example stitch function:
+The configuration object needs to contain a Model and Collection for each datatype, as well as an array of `stitchers` which define the relationship to any child objects. In this example, our Book objects have an array of Author objects that need to be populated, so the enum would have a stithcer as follows:
 
-```javascript
-//Stitching Function
-var stitch = function(rootData, rootParentType) {
-  var that = this;
-
-  function stitchBook(book) {
-    book.authors  = _.map(book.authors, function(authorId) {
-      if (_.isString(authorId)) {
-        //If object is not populated, look for it in the hash
-        var refObj = that._modelHash['authors'].get(authorId);
-        //If we have it, plug it into the right place in the object
-        if (refObj) {
-          var refObjCopy = JSON.parse(JSON.stringify(refObj));
-          stitchAuthor(refObjCopy);
-          return refObjCopy;
-        }
+```
+var CLASS_ENUM = {
+  'books' : {
+    model : Book,
+    collection : Books,
+    stitchers : [
+      {
+        objectPath : 'author_list',
+        idPath : 'author_id',
+        modelType: 'authors'
       }
-      //If obj is populated, or if we don't have it, just put the id back
-      return authorId;
-    });
-  }
-
-  function stitchBooks(books) {
-    _.each(books, stitchBook);
-  }
-
-
-  switch (rootParentType){
-    case 'books':
-      stitchBooks(rootData);
-      break;
-    case 'authors':
-      //no dependent objects
-      break;
-    default:
-      throw new Error('Stitching with invalid parent type');
-  }
-
-  return rootData;
-}
+    ]
+  },
+  'authors' : {
+    model : Author,
+    collection : Authors
+  },
+};
 ```
 
 ##5. Instantiate Object Store
 
-Each object store will be represented as one tree attached to one DOM node. If you have a single react tree for all data, you can maintain a single store, or you can create a separate one to handle separate data objects. Note that instantiation only applies to configuration, and that you'll need to call `ResetData` to load the initial data into the tree.
+Each object store will be represented as one tree attached to one DOM node so you can create a separate store to handle separate data objects that live in separate trees. Note that instantiation only configures the Object Store, and that you'll need to call `ResetData()` to load the initial data into the tree.
+
+```
+var myObjectStore = new LazyObjectStore(CLASS_ENUM);
+```
+
+##6. Reset Data
+
+Finally, load some data into the store, and tell it what React class to use to display the data, and which DOM node should be the parent.
+```javascript
+ObjStore.resetData(
+  books,        //data: array of top-level objects
+  'books',      //model name: field name in CLASS_ENUM corresponding to the object type
+  BookListView, //React component that expects an array of 'book' objects in the rootData prop
+  $('#react-parent')[0]);
+```
 
 #Top-level API
 
@@ -180,12 +154,26 @@ These functions are called from outside your React components, and are used to i
 ##Constructor
 
 ```javascript
-var ObjStore = function(stitch, classEnum){...
+var ObjStore = function(classEnum){...
 ```
 
-See above for notes on designing a `stitch()` function.
+The classEnum is a configuration for the data types that will be stored, and the Backbone classes that will be used to store them. It also includes a list of 'stitchers' that describe how objects relate to each other. This includes three parameters:
 
-The classEnum is a configuration for the data types that will be stored, and the Backbone classes that will be used to store them.
+ * `objectPath` : The field name on the parent object where we will find the relevant stitched reference location. Note that if we have an array of reference objects, this should only reference the field that stores the array, and we can use `idPath` to reference fields inside each reference object.
+ * `modelType` : The classEnum key that corresponds to the child object's type. For recursive stitching this can be the key that contains this stitcher (for example, a 'person' may have an array of 'friends' that have `modelType: 'person'`).
+ * `idPath` : If a reference to a child object lives in a parent object (as in our example, which has `author_id` inside an array of objects on the Book), then this field tells the stitcher which field on contains the reference to the child. 
+
+```
+//Book
+// {
+//   _id     : '538f255864d771bf0bd9dddd',
+//   title   : 'The C Programming Language',
+//   author_list : [
+//     { author_id : '538f255864d771bf0bd91111'},
+//     { author_id : '538f255864d771bf0bd93333'}
+//   ]
+// }
+```
 
 ```javascript
 var Book = Backbone.Model.extend({
@@ -201,7 +189,14 @@ var Books = Backbone.Collection.extend({
 var CLASS_ENUM = {
   'books' : {
     model : Book,
-    collection : Books
+    collection : Books,
+    stitchers : [
+      {
+        objectPath : 'author_list',
+        idPath : 'author_id',
+        modelType: 'authors'
+      }
+    ]
   },
   'authors' : {
     model : Author,
@@ -210,7 +205,7 @@ var CLASS_ENUM = {
 };
 ```
 
-##ResetData
+##Reset Data
 
 ```javascript
 function resetData(topLevelData, rootParentType, rootParentReactClass, rootParentNode) {...
@@ -222,7 +217,7 @@ This is used to instantiate a react tree with a given data array on a given DOM 
 ObjStore.resetData(
   books,        //data: array of top-level objects
   'books',      //model name: configured at instantiation
-  BookListView,
+  BookListView, //React component that expects an array of 'book' objects in the rootData prop
   $('#react-parent')[0]);
 
 ```
@@ -237,7 +232,7 @@ This is used to override the contents of an un-initialized collection. This can 
 
 #Update API
 
-These functions are called from within React components, *by accessing the `objStore` prop that is passed into the top-level component.* All of these functions trigger a re-render of the UI.
+These functions are called from within React components, **by accessing the `objStore` prop that is passed into the top-level component.** All of these functions trigger a re-render of the UI.
 
 ##Add
 
@@ -252,7 +247,7 @@ var BookView = React.createClass({
   ...
   addAuthor : function(authorName) {
     this.props.objStore.add(
-      {name : authorName},
+      {author_name : authorName},
       'authors');
   },
   ...
@@ -305,7 +300,7 @@ var BookView = React.createClass({
 function fetch(ids, modelName) {...
 ```
 
-This is how your application can lazy-load data, and should be called from within the React views when an action is taken that necessitates additional objects to be loaded. Since this will automatically trigger a re-render when the data returns, the stitching function should automatically swap the new data in its correct place. Note that fetching an object that already exists in the Object Store will have no effect; if you need to explicitly update an object with data from the server, use `refresh`.
+This is how your application can lazy-load data, and should be called from within the React views when an action is taken that requires additional objects to be loaded. Note that fetching an object that already exists in the Object Store will have no effect; if you need to explicitly update an object with data from the server, use `refresh`.
 
 For example, when a user toggles open a Book view, we might want to load the Author objects ahead of time in case the user wants to view the authors:
 
@@ -313,7 +308,7 @@ For example, when a user toggles open a Book view, we might want to load the Aut
 var BookView = React.createClass({
   ...
   toggleVisible : function() {
-    var authorIds = this.props.book.authors;
+    var authorIds = this.props.book.author_list;
     this.props.objStore.fetch(authorIds);
     this.setState({viewExpanded : true});
   },
@@ -321,13 +316,13 @@ var BookView = React.createClass({
 });
 ```
 
-##FetchAll
+##Fetch All
 
 ```javascript
 function fetchAll(modelName, [callback]) {...
 ```
 
-A convenience function that requests all objects of the given type from the server. Useful for populating multi-selects, and other cases where all elements should be displayed to the user. Any subsequent calls to this function will result in no action. 
+A convenience function that requests all objects of the given type from the server. Useful for populating multi-selects, and other cases where all elements in your database (of a given type) should be displayed to the user. Any subsequent calls to this function will result in no action. 
 
 ##Refresh
 
@@ -337,7 +332,7 @@ function refresh(id, modelName, [callback]) {...
 
 Use this function to retrieve data for an object from the server and overwrite the current object stored in the Object Store, if it exists. This is useful when your application triggers a server-side process that updates data objects without returning the updated representations to your React component.
 
-For example, a book store might provide a button to check competitors' prices, and cache them on the book object. The server would go examine competitors sites, save the results to the database, and then return to the client. 
+For example, a book store might provide a button to check competitors' prices, and cache them on the book object in the database. The server would go examine competitors sites, save the results, and then return to the client. 
 
 ```
 var BookView = React.createClass({
