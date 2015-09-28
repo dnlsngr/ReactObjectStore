@@ -14,13 +14,15 @@ var BOOKS = [
   {
     _id     : 'BOOKID_1',
     title   : 'Javascript: The Good Parts',
-    authors : ['AUTHORID_1']
+    authors : [
+      {author_id : 'AUTHORID_1'}
+    ]
   }
 ];
 var AUTHORS = [
   {
-    _id     : 'AUTHORID_1',
-    name    : 'Douglas Crockford'
+    _id         : 'AUTHORID_1',
+    author_name : 'Douglas Crockford'
   }
 ];
 
