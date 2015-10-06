@@ -162,7 +162,7 @@ The classEnum is a configuration for the data types that will be stored, and the
  * `objectPath` : The field name on the parent object where we will find the relevant stitched reference location. Note that if we have an array of reference objects, this should only reference the field that stores the array, and we can use `idPath` to reference fields inside each reference object.
  * `modelType` : The classEnum key that corresponds to the child object's type. For recursive stitching this can be the key that contains this stitcher (for example, a 'person' may have an array of 'friends' that have `modelType: 'person'`).
  * `idPath` : If a reference to a child object lives in a parent object (as in our example, which has `author_id` inside an array of objects on the Book), then this field tells the stitcher which field on contains the reference to the child. 
-
+ 
 ```
 //Book
 // {
